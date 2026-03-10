@@ -1,0 +1,27 @@
+=== Training Start: 2025-12-24 20:10:27 ===
+Model: klue/roberta-base
+Config: Batch: 16, LR: 2e-05, Epochs: 10
+------------------------------------------------------------
+Epoch 1/10 | Loss: 0.0283 | Time: 48m 9s
+Checkpoint saved: checkpoints/essay_model_251224_ep1.pt
+Epoch 2/10 | Loss: 0.0210 | Time: 34m 5s
+Checkpoint saved: checkpoints/essay_model_251224_ep2.pt
+Epoch 3/10 | Loss: 0.0175 | Time: 77m 8s
+Checkpoint saved: checkpoints/essay_model_251224_ep3.pt
+Epoch 4/10 | Loss: 0.0149 | Time: 140m 21s
+Checkpoint saved: checkpoints/essay_model_251225_ep4.pt
+Epoch 5/10 | Loss: 0.0130 | Time: 85m 44s
+Checkpoint saved: checkpoints/essay_model_251225_ep5.pt
+Epoch 6/10 | Loss: 0.0116 | Time: 54m 18s
+Checkpoint saved: checkpoints/essay_model_251225_ep6.pt
+Epoch 7/10 | Loss: 0.0102 | Time: 70m 59s
+Checkpoint saved: checkpoints/essay_model_251225_ep7.pt
+Epoch 8/10 | Loss: 0.0092 | Time: 81m 40s
+Checkpoint saved: checkpoints/essay_model_251225_ep8.pt
+Epoch 9/10 | Loss: 0.0081 | Time: 31m 59s
+Checkpoint saved: checkpoints/essay_model_251225_ep9.pt
+Epoch 10/10 | Loss: 0.0074 | Time: 37m 2s
+Checkpoint saved: checkpoints/essay_model_251225_ep10.pt
+------------------------------------------------------------
+
+=== Training Finished (Total: 661m 39s) ===

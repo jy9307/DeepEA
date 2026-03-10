@@ -6,13 +6,15 @@ from torch.utils.data import Dataset, DataLoader
 from transformers import AutoTokenizer, AutoModel
 from sklearn.metrics import cohen_kappa_score
 import numpy as np
+
+from datetime import datetime
 import json
 import argparse 
 import os
+import time
+from tqdm import tqdm
 
-from tools.logger import log_batch
-
-
+from tools.logger import TrainingLogger, log_batch
 
 class DEADataset(Dataset) :
     def __init__(self, data_list, tokenizer, max_len=512, max_score=5) :
@@ -34,9 +36,13 @@ class DEADataset(Dataset) :
 
         student_answer = item['response']
         question = item['question']
+        rubric_item = item['rubric']
+        rubric_desc_5 = rubric_item['evaluation_5']
+        rubric_name = rubric_item['name']
+        rubric_text = f"문항 : {question} / 평가영역: {rubric_name} / 기준: {rubric_desc_5}"
 
         encoding = self.tokenizer(
-            question,
+            rubric_text,
             student_answer,
             add_special_tokens = True,
             max_length = self.max_len,
@@ -118,7 +124,10 @@ def data_open(name, mode) :
 def train_fn(model, dataloader, optimizer, criterion, device):
     model.train()
     total_loss = 0
-    for batch in dataloader:
+    
+    progress_bar = tqdm(dataloader, desc="Training", leave=False)
+    
+    for batch in progress_bar:
         optimizer.zero_grad()
         
         input_ids = batch['input_ids'].to(device)
@@ -131,6 +140,8 @@ def train_fn(model, dataloader, optimizer, criterion, device):
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
+    
+        progress_bar.set_postfix({'loss': f"{loss.item():.4f}"})
     
     return total_loss / len(dataloader)
 
@@ -217,23 +228,70 @@ if __name__ == "__main__" :
     # --- Mode별 실행 ---
     if args.mode == "train":
         print(f"--- Training Start ---")
+
+        load_path = os.path.join("checkpoints", args.model_path)
+        if os.path.exists(load_path):
+            print(f"▶ 기존 체크포인트를 발견했습니다: {load_path}")
+            model.load_state_dict(torch.load(load_path, map_location=DEVICE))
+            print("▶ 가중치 로드 완료. 이어서 학습을 시작합니다.")
+        else:
+            print("▶ 기존 체크포인트가 없습니다. 처음부터 학습을 시작합니다.")
+        
+        # 1. 로거 초기화
+        config_info = f"Batch: {BATCH_SIZE}, LR: {args.lr}, Epochs: {args.epochs}"
+        logger = TrainingLogger(log_dir="logs", model_name=MODEL_NAME, config_str=config_info)
+
         criterion = nn.MSELoss()
         optimizer = optim.AdamW(model.parameters(), lr=args.lr)
 
-        for epoch in range(args.epochs):
-            avg_loss = train_fn(model, dataloader, optimizer, criterion, DEVICE)
-            print(f"Epoch {epoch+1}/{args.epochs} | Train Loss: {avg_loss:.4f}")
+        if not os.path.exists("checkpoints"):
+            os.makedirs("checkpoints")
         
-        torch.save(model.state_dict(), args.model_path)
-        print(f"Model saved to {args.model_path}")
+        # 전체 학습 시작 시간 측정
+        total_start_time = time.time()
+
+        for epoch in range(args.epochs):
+            epoch_start = time.time()
+            
+            avg_loss = train_fn(model, dataloader, optimizer, criterion, DEVICE)
+        
+            epoch_end = time.time()
+            duration = epoch_end - epoch_start
+        
+            print(f"Epoch {epoch+1}/{args.epochs} | Train Loss: {avg_loss:.4f}")
+            logger.log_epoch(epoch + 1, args.epochs, avg_loss, duration)
+
+            # ==========================================
+            # [수정] 에포크마다 모델 저장 로직 추가
+            # ==========================================
+            # 파일명 예시: essay_model_251224_ep1.pt
+            base_name = args.model_path.split(".")[0]
+            date_str = datetime.now().strftime("%y%m%d")
+            ckpt_name = f"{base_name}_{date_str}_ep{epoch+1}.pt"
+            
+            save_path = os.path.join("checkpoints", ckpt_name)
+            
+            torch.save(model.state_dict(), save_path)
+            
+            # 로그 및 출력
+            logger.log(f"Checkpoint saved: {save_path}")
+            print(f"   >> Checkpoint saved to {save_path}")
+            # ==========================================
+
+        total_duration = time.time() - total_start_time
+        logger.finish(total_duration)
+
 
     elif args.mode == "eval":
+
+        model_path = os.path.join("checkpoints", args.model_path)
+
         print(f"--- Evaluation Start ---")
-        if os.path.exists(args.model_path):
-            model.load_state_dict(torch.load(args.model_path, map_location=DEVICE))
-            print(f"Loaded weights from {args.model_path}")
+        if os.path.exists(model_path):
+            model.load_state_dict(torch.load(model_path, map_location=DEVICE))
+            print(f"Loaded weights from {model_path}")
         else:
-            print(f"Error: Model file '{args.model_path}' not found.")
+            print(f"Error: Model file '{model_path}' not found.")
             exit()
 
         criterion = nn.MSELoss()
@@ -263,8 +321,8 @@ if __name__ == "__main__" :
 
     elif args.mode == "predict":
         print(f"--- Prediction Start ---")
-        if os.path.exists(args.model_path):
-            model.load_state_dict(torch.load(args.model_path, map_location=DEVICE))
+        if os.path.exists(model_path):
+            model.load_state_dict(torch.load(model_path, map_location=DEVICE))
             print("Loaded pretrained model weights.")
         else:
             print("Warning: Predicting with initialized (random) weights.")

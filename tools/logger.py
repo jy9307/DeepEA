@@ -1,6 +1,59 @@
-# tools/logger.py
-
+import os
+import time
+from datetime import datetime
 import torch
+
+# ==========================================
+# 1. 학습 기록용 클래스 (File Logging)
+# ==========================================
+
+class TrainingLogger:
+    def __init__(self, log_dir="logs", model_name="model", config_str=""):
+        """
+        학습 로그 파일을 생성하고 관리하는 클래스
+        """
+        # 로그 디렉토리 생성
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+            
+        # 파일명 생성 (예: train_log_231225_1430.txt)
+        self.file_name = f"train_log_{datetime.now().strftime('%y%m%d_%H%M')}.txt"
+        self.file_path = os.path.join(log_dir, self.file_name)
+        
+        # 헤더 작성
+        with open(self.file_path, "w", encoding="utf-8") as f:
+            f.write(f"=== Training Start: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+            f.write(f"Model: {model_name}\n")
+            if config_str:
+                f.write(f"Config: {config_str}\n")
+            f.write("-" * 60 + "\n")
+            
+        print(f"▶ 로그 파일 생성됨: {self.file_path}")
+
+    def log(self, message):
+        """일반 텍스트를 파일에 기록"""
+        with open(self.file_path, "a", encoding="utf-8") as f:
+            f.write(message + "\n")
+
+    def log_epoch(self, epoch, total_epochs, loss, duration_seconds):
+        """에폭별 학습 결과를 포맷팅하여 기록"""
+        mins, secs = divmod(duration_seconds, 60)
+        time_str = f"{int(mins)}m {int(secs)}s"
+        
+        log_msg = f"Epoch {epoch}/{total_epochs} | Loss: {loss:.4f} | Time: {time_str}"
+        
+        # 파일에 저장
+        with open(self.file_path, "a", encoding="utf-8") as f:
+            f.write(log_msg + "\n")
+
+    def finish(self, total_duration):
+        """학습 종료 메시지 기록"""
+        t_mins, t_secs = divmod(total_duration, 60)
+        msg = f"\n=== Training Finished (Total: {int(t_mins)}m {int(t_secs)}s) ==="
+        
+        with open(self.file_path, "a", encoding="utf-8") as f:
+            f.write("-" * 60 + "\n")
+            f.write(msg + "\n")
 
 
 def log_batch(

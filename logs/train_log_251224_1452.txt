@@ -1,0 +1,6 @@
+=== Training Start: 2025-12-24 14:52:51 ===
+Model: klue/roberta-base
+Config: Batch: 16, LR: 2e-05, Epochs: 10
+------------------------------------------------------------
+Epoch 1/10 | Loss: 0.0298 | Time: 32m 10s
+Epoch 2/10 | Loss: 0.0219 | Time: 33m 35s

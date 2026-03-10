@@ -1,3 +1,9 @@
 EFA.ipynb
+
 datasets/
+train_data/
+val_data/
+logs/
+
 checkpoints
+.DS_Store

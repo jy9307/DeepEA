@@ -9,30 +9,49 @@ def load_json_file(file_path):
     
     return data
 
-data_type = 'val'
-data_name = "mid_1_society"
+data_type = 'train'
 
 path = f'datasets/selected/{data_type}'
 
-files_path = os.path.join(path, data_name)
-files = os.listdir(files_path)
+subjects = os.listdir(path)
 
-files_data = [load_json_file(os.path.join(files_path, file)) for file in files if file.endswith('.json')]
 
-results = []
 
-for f in files_data :
+expert_1_result = []
+expert_2_result = []
 
-    result = {
-        "id" : f['essay_question']['id'],
-        "question" : f['essay_question']['prompt'],
-        "response" : f['essay_answer']['text'],
-        "score" : f['score']['personal']['holistic']['score']
-    }
+for s in subjects :
+    files = os.listdir(os.path.join(path, s))
+    files_data = [load_json_file(os.path.join(path, s, file)) for file in files if file.endswith('.json')]
 
-    results.append(result)
+    for f in files_data :
+        for k in f['rubric']['analytic'].keys() :
+            
 
-result_path = os.path.join(f"{data_type}_data", f"{data_name}_essay_qas_eval.json")
 
-with open(result_path, "w", encoding= "utf-8") as f :
-    json.dump(results, f, ensure_ascii = False, indent = 4)
+            result_1 = {
+                "id" : f['essay_question']['id'],
+                "question" : f['essay_question']['prompt'],
+                "response" : f['essay_answer']['text'],
+                "score" : f['score']['personal']['analytic'][k]['score'][0],
+                "rubric" : f['rubric']['analytic'][k]
+            }
+
+            expert_1_result.append(result_1)
+
+            result_2 = {
+                "id" : f['essay_question']['id'],
+                "question" : f['essay_question']['prompt'],
+                "response" : f['essay_answer']['text'],
+                "score" : f['score']['personal']['analytic'][k]['score'][1],
+                "rubric" : f['rubric']['analytic'][k]
+            }
+
+            expert_2_result.append(result_2)
+
+
+for i in range(2) :
+    result_path = os.path.join(f"{data_type}_data", f"{data_type}_essay_qas_{data_type}_expert_{i}.json")
+
+    with open(result_path, "w", encoding= "utf-8") as f :
+        json.dump(expert_1_result if i == 0 else expert_2_result, f, ensure_ascii = False, indent = 4)
