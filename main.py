@@ -53,10 +53,7 @@ class DEADataset(Dataset) :
 
         try :
             labels = torch.tensor(
-                [
-                    float(item['score'][0]) / self.max_score,
-                    float(item['score'][1]) / self.max_score
-                ]
+                    float(item['score']) / self.max_score
             )
         
         except :
@@ -197,11 +194,14 @@ if __name__ == "__main__" :
     parser.add_argument("--lr", type=float, default=2e-5)
     parser.add_argument("--model_path", type=str, default="essay_model.pt")
     parser.add_argument("--target", type=str, required=True) # target 파일명 필수
+    parser.add_argument("--batch_size", type=int, default=16)
     args = parser.parse_args()
 
     MODEL_NAME = "klue/roberta-base"
     MAX_LEN = 512
-    BATCH_SIZE = 16
+    if args.batch_size <= 0:
+        raise ValueError("--batch_size must be a positive integer.")
+    BATCH_SIZE = args.batch_size
     NUM_TRAITS = 2
     MAX_SCORE = 5
 
