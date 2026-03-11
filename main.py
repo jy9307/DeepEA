@@ -202,7 +202,7 @@ if __name__ == "__main__" :
     if args.batch_size <= 0:
         raise ValueError("--batch_size must be a positive integer.")
     BATCH_SIZE = args.batch_size
-    NUM_TRAITS = 2
+    NUM_TRAITS = 1
     MAX_SCORE = 5
 
     if torch.backends.mps.is_available():
