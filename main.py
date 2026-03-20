@@ -4,7 +4,14 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 
 from transformers import AutoTokenizer, AutoModel
-from sklearn.metrics import cohen_kappa_score
+from sklearn.metrics import (
+    cohen_kappa_score, 
+    accuracy_score, 
+    precision_score, 
+    recall_score, 
+    f1_score
+)
+
 import numpy as np
 
 from datetime import datetime
@@ -51,13 +58,15 @@ class DEADataset(Dataset) :
             return_tensors="pt"
         )
 
-        try :
+        try:
+            # 값을 리스트 [ ] 로 감싸서 1차원 텐서로 만들어줌 -> 배치로 묶이면 [batch_size, 1]이 됨
             labels = torch.tensor(
-                    float(item['score']) / self.max_score
+                [float(item['score']) / self.max_score], 
+                dtype=torch.float32
             )
-        
-        except :
-            labels = torch.tensor([])
+        except:
+            # 점수가 없는 경우(예: predict 모드)를 대비하여 모델 출력과 차원이 맞는 더미(dummy) 값 할당
+            labels = torch.tensor([-1.0], dtype=torch.float32)
 
         embeddings_ = {
             'input_ids' : encoding['input_ids'].flatten(),
@@ -153,8 +162,11 @@ def eval_fn(model, dataloader, criterion, device):
     all_preds = []
     all_labels = []
 
+    # tqdm 진행률 바 추가
+    progress_bar = tqdm(dataloader, desc="Evaluating", leave=False)
+
     with torch.no_grad():
-        for batch in dataloader:
+        for batch in progress_bar:
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].to(device)
@@ -164,13 +176,15 @@ def eval_fn(model, dataloader, criterion, device):
             # Loss 계산
             loss = criterion(outputs, labels)
             total_loss += loss.item()
+            
+            # tqdm 바 우측에 현재 배치의 loss 표시
+            progress_bar.set_postfix({'loss': f"{loss.item():.4f}"})
 
             all_preds.append(outputs.cpu().numpy())
             all_labels.append(labels.cpu().numpy())
 
     avg_loss = total_loss / len(dataloader)
     return avg_loss, np.vstack(all_preds), np.vstack(all_labels)
-
 def predict_fn(model, dataloader, device):
     model.eval()
     all_preds = []
@@ -284,40 +298,58 @@ if __name__ == "__main__" :
 
     elif args.mode == "eval":
 
-        model_path = os.path.join("checkpoints", args.model_path)
+            model_path = os.path.join("checkpoints", args.model_path)
 
-        print(f"--- Evaluation Start ---")
-        if os.path.exists(model_path):
-            model.load_state_dict(torch.load(model_path, map_location=DEVICE))
-            print(f"Loaded weights from {model_path}")
-        else:
-            print(f"Error: Model file '{model_path}' not found.")
-            exit()
+            print(f"--- Evaluation Start ---")
+            if os.path.exists(model_path):
+                model.load_state_dict(torch.load(model_path, map_location=DEVICE))
+                print(f"Loaded weights from {model_path}")
+            else:
+                print(f"Error: Model file '{model_path}' not found.")
+                exit()
 
-        criterion = nn.MSELoss()
-        avg_loss, preds, labels = eval_fn(model, dataloader, criterion, DEVICE)
-        
-        print(f"▶ Evaluation Result")
-        print(f"   MSE Loss : {avg_loss:.4f}")
-        print(f"   RMSE     : {np.sqrt(avg_loss):.4f}")
-        
-        qwk_scores = []
-        for i in range(NUM_TRAITS):
-
-            p_int = np.rint(preds[:, i]).astype(int) 
-            l_int = np.rint(labels[:, i]).astype(int)
+            criterion = nn.MSELoss()
+            avg_loss, preds, labels = eval_fn(model, dataloader, criterion, DEVICE)
             
-            # weights='quadratic'이 핵심
-            score = cohen_kappa_score(l_int, p_int, weights='quadratic')
-            qwk_scores.append(score)
-            print(f"   Trait {i+1} QWK : {score:.4f}")
+            print(f"▶ Evaluation Result")
+            print(f"   MSE Loss : {avg_loss:.4f}")
+            print(f"   RMSE     : {np.sqrt(avg_loss):.4f}")
+            print("-" * 30)
+            
+            qwk_scores = []
+            f1_scores = []
+            
+            for i in range(NUM_TRAITS):
+                # 연속형 예측값과 정답을 정수 클래스(점수)로 변환
+                p_int = np.rint(preds[:, i]).astype(int) 
+                l_int = np.rint(labels[:, i]).astype(int)
+                
+                # 기존 QWK 계산
+                qwk = cohen_kappa_score(l_int, p_int, weights='quadratic')
+                qwk_scores.append(qwk)
+                
+                # 추가된 기본 평가 지표 계산 (다중 클래스이므로 average='weighted' 사용)
+                acc = accuracy_score(l_int, p_int)
+                precision = precision_score(l_int, p_int, average='weighted', zero_division=0)
+                recall = recall_score(l_int, p_int, average='weighted', zero_division=0)
+                f1 = f1_score(l_int, p_int, average='weighted', zero_division=0)
+                f1_scores.append(f1)
+                
+                print(f"   [Trait {i+1} Metrics]")
+                print(f"   QWK       : {qwk:.4f}")
+                print(f"   Accuracy  : {acc:.4f}")
+                print(f"   Precision : {precision:.4f}")
+                print(f"   Recall    : {recall:.4f}")
+                print(f"   F1 Score  : {f1:.4f}")
+                print("-" * 30)
 
-        print(f"   Average QWK : {np.mean(qwk_scores):.4f}")
-        # -------------------------
-        
-        print("\n[Sample Comparison (Pred vs Real)]")
-        for i in range(min(3, len(preds))):
-            print(f"   Sample {i+1}: {preds[i]} vs {labels[i]}")
+            print(f"   Average QWK : {np.mean(qwk_scores):.4f}")
+            print(f"   Average F1  : {np.mean(f1_scores):.4f}")
+            print("-" * 30)
+            
+            print("\n[Sample Comparison (Pred vs Real)]")
+            for i in range(min(3, len(preds))):
+                print(f"   Sample {i+1}: {preds[i]} vs {labels[i]}")
 
     elif args.mode == "predict":
         print(f"--- Prediction Start ---")
